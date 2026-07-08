@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>湖上花火大会 — リアル花火シミュレーター</title>
-<meta name="description" content="スマホで楽しめるリアルな花火シミュレーター。大スターマイン・菊・牡丹・枝垂柳など好きな花火を打ち上げよう。">
+<title>湖上花火大会 3D — リアル花火シミュレーター</title>
+<meta name="description" content="スマホで楽しめる3Dリアル花火シミュレーター。ドラッグで見回し、タップで大スターマインや菊・牡丹を打ち上げよう。">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;700&family=Zen+Kaku+Gothic+New:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -21,13 +21,11 @@
   body{
     font-family:"Zen Kaku Gothic New",system-ui,sans-serif;
     color:var(--ink);
-    touch-action:manipulation;
+    touch-action:none;
     user-select:none;-webkit-user-select:none;
   }
-  canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
-  #bg{z-index:0}#re{z-index:1}#fx{z-index:2}
+  #stage{position:fixed;inset:0;z-index:0}
 
-  /* ---------- 上部タイトル ---------- */
   header{
     position:fixed;z-index:10;top:0;left:0;right:0;
     padding:calc(env(safe-area-inset-top) + 14px) 18px 10px;
@@ -35,15 +33,12 @@
     pointer-events:none;
     background:linear-gradient(to bottom,rgba(4,6,15,.75),transparent);
   }
-  .title{pointer-events:none}
   .title h1{
     font-family:"Shippori Mincho",serif;font-weight:700;
     font-size:clamp(19px,4.6vw,26px);letter-spacing:.32em;
     text-shadow:0 0 18px rgba(255,180,92,.35);
   }
-  .title p{
-    font-size:11px;letter-spacing:.18em;color:var(--ink-dim);margin-top:4px;
-  }
+  .title p{font-size:11px;letter-spacing:.18em;color:var(--ink-dim);margin-top:4px}
   .switches{display:flex;gap:8px;pointer-events:auto}
   .sw{
     font-family:inherit;font-size:11.5px;letter-spacing:.06em;color:var(--ink-dim);
@@ -57,9 +52,8 @@
   }
   .sw:focus-visible{outline:2px solid var(--lantern);outline-offset:2px}
 
-  /* ---------- 中央のヒント ---------- */
   #hint{
-    position:fixed;z-index:9;left:50%;top:42%;transform:translate(-50%,-50%);
+    position:fixed;z-index:9;left:50%;top:40%;transform:translate(-50%,-50%);
     text-align:center;pointer-events:none;transition:opacity 1s;
   }
   #hint .ring{
@@ -72,10 +66,9 @@
     70%{transform:scale(1.25);opacity:0}
     100%{transform:scale(1.25);opacity:0}
   }
-  #hint p{font-size:13px;letter-spacing:.28em;color:var(--ink-dim)}
+  #hint p{font-size:12.5px;letter-spacing:.24em;color:var(--ink-dim);line-height:2}
   #hint.hide{opacity:0}
 
-  /* ---------- 玉名表示(打ち上げアナウンス) ---------- */
   #tamana{
     position:fixed;z-index:9;left:50%;bottom:calc(env(safe-area-inset-bottom) + 132px);
     transform:translateX(-50%);
@@ -86,7 +79,6 @@
   }
   #tamana.show{opacity:1}
 
-  /* ---------- 花火選択(番付) ---------- */
   nav{
     position:fixed;z-index:10;left:0;right:0;bottom:0;
     padding:12px 14px calc(env(safe-area-inset-bottom) + 14px);
@@ -95,6 +87,7 @@
   .rail{
     display:flex;gap:9px;overflow-x:auto;scrollbar-width:none;
     padding:4px 2px;scroll-snap-type:x proximity;
+    touch-action:pan-x;
   }
   .rail::-webkit-scrollbar{display:none}
   .tama{
@@ -117,21 +110,22 @@
   .tama.sel .yomi{color:var(--lantern)}
   .tama:focus-visible{outline:2px solid var(--lantern);outline-offset:2px}
 
-  @media (prefers-reduced-motion:reduce){
-    #hint .ring{animation:none;opacity:.5}
+  #fallback{
+    position:fixed;z-index:20;inset:0;display:none;
+    align-items:center;justify-content:center;text-align:center;
+    background:var(--night);padding:30px;font-size:14px;line-height:2;color:var(--ink-dim);
   }
+  @media (prefers-reduced-motion:reduce){ #hint .ring{animation:none;opacity:.5} }
 </style>
 </head>
 <body>
 
-<canvas id="bg"></canvas>
-<canvas id="re"></canvas>
-<canvas id="fx"></canvas>
+<div id="stage"></div>
 
 <header>
   <div class="title">
     <h1>湖上花火大会</h1>
-    <p>REALISTIC HANABI SIMULATOR</p>
+    <p>3D HANABI SIMULATOR</p>
   </div>
   <div class="switches">
     <button class="sw" id="swAuto" aria-pressed="false">自動打上 OFF</button>
@@ -141,7 +135,7 @@
 
 <div id="hint">
   <div class="ring"></div>
-  <p>空 に ふ れ て 打 ち 上 げ</p>
+  <p>タップで打ち上げ<br>ドラッグで見回し ・ ピンチで遠近</p>
 </div>
 
 <div id="tamana" aria-live="polite"></div>
@@ -150,498 +144,582 @@
   <div class="rail" id="rail"></div>
 </nav>
 
+<div id="fallback">3D表示を読み込めませんでした。<br>通信環境をご確認のうえ再読み込みしてください。</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 "use strict";
 /* ============================================================
-   湖上花火大会 — リアル花火シミュレーター
-   2キャンバス構成: bg(夜景) / fx(花火) + re(湖面反射)
+   湖上花火大会 3D — Three.js(WebGL)による立体花火
+   ・GPUパーティクル(加算合成シェーダー)
+   ・湖面リフレクション(ジオメトリ共有のミラー描画)
+   ・ドラッグ視点回転 / ピンチズーム / タップ打上
 ============================================================ */
-const DPR = Math.min(window.devicePixelRatio || 1, 2);
-const bgC = document.getElementById("bg"), bgX = bgC.getContext("2d");
-const fxC = document.getElementById("fx"), fxX = fxC.getContext("2d");
-const reC = document.getElementById("re"), reX = reC.getContext("2d");
-let W = 0, H = 0, WATER = 0;   // WATER = 水面のy座標
+if (typeof THREE === "undefined"){
+  document.getElementById("fallback").style.display = "flex";
+  throw new Error("three.js not loaded");
+}
+
+/* ---------- 基本セットアップ ---------- */
+const stage = document.getElementById("stage");
+const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:false });
+renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+renderer.setSize(innerWidth, innerHeight);
+stage.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x02030a);
+scene.fog = new THREE.FogExp2(0x04060f, 0.0032);
+
+const camera = new THREE.PerspectiveCamera(58, innerWidth/innerHeight, 0.1, 900);
+const camTarget = new THREE.Vector3(0, 20, 0);
+let camTheta = 0, camPhi = 0.12, camDist = 78;
+function updateCamera(){
+  camPhi = Math.min(0.6, Math.max(-0.05, camPhi));
+  camDist = Math.min(150, Math.max(35, camDist));
+  camera.position.set(
+    camTarget.x + camDist * Math.sin(camTheta) * Math.cos(camPhi),
+    camTarget.y + camDist * Math.sin(camPhi) + 2,
+    camTarget.z + camDist * Math.cos(camTheta) * Math.cos(camPhi)
+  );
+  camera.lookAt(camTarget);
+}
+updateCamera();
+
+addEventListener("resize", () => {
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
 const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const rnd = (a,b) => a + Math.random()*(b-a);
 
-function resize(){
-  W = innerWidth; H = innerHeight; WATER = H * 0.82;
-  for (const c of [bgC, fxC, reC]){
-    c.width = W * DPR; c.height = H * DPR;
-    c.getContext("2d").setTransform(DPR, 0, 0, DPR, 0, 0);
-  }
-  paintBackground();
+/* ---------- 夜空グラデーションドーム ---------- */
+{
+  const geo = new THREE.SphereGeometry(500, 24, 16);
+  const mat = new THREE.ShaderMaterial({
+    side: THREE.BackSide, depthWrite:false, fog:false,
+    vertexShader:`
+      varying float vY;
+      void main(){ vY = normalize(position).y;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+    fragmentShader:`
+      varying float vY;
+      void main(){
+        vec3 top = vec3(0.006,0.010,0.038);
+        vec3 hor = vec3(0.055,0.075,0.190);
+        float t = smoothstep(-0.05, 0.55, vY);
+        gl_FragColor = vec4(mix(hor, top, t), 1.0); }`
+  });
+  scene.add(new THREE.Mesh(geo, mat));
 }
-addEventListener("resize", resize);
 
-/* ---------- 夜景(静止画レイヤー) ---------- */
-function paintBackground(){
-  // 夜空グラデーション
-  const sky = bgX.createLinearGradient(0, 0, 0, WATER);
-  sky.addColorStop(0, "#02030a");
-  sky.addColorStop(0.55, "#060a1c");
-  sky.addColorStop(1, "#0d1330");
-  bgX.fillStyle = sky;
-  bgX.fillRect(0, 0, W, WATER);
-
-  // 星
-  for (let i = 0; i < 130; i++){
-    const x = Math.random() * W, y = Math.random() * WATER * 0.85;
-    const r = Math.random() * 0.9 + 0.2;
-    bgX.fillStyle = `rgba(220,228,255,${Math.random() * 0.55 + 0.1})`;
-    bgX.beginPath(); bgX.arc(x, y, r, 0, 7); bgX.fill();
+/* ---------- 星空 ---------- */
+{
+  const n = 900, pos = new Float32Array(n*3);
+  for (let i=0;i<n;i++){
+    const th = Math.random()*Math.PI*2;
+    const ph = Math.acos(rnd(0.03, 1));
+    const r = 460;
+    pos[i*3]   = r*Math.sin(ph)*Math.cos(th);
+    pos[i*3+1] = r*Math.cos(ph);
+    pos[i*3+2] = r*Math.sin(ph)*Math.sin(th);
   }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.BufferAttribute(pos,3));
+  const m = new THREE.PointsMaterial({ color:0xcdd6ff, size:1.4, sizeAttenuation:true,
+    transparent:true, opacity:0.75, fog:false, depthWrite:false });
+  scene.add(new THREE.Points(g, m));
+}
 
-  // 遠くの山並み(2層)
-  mountain(WATER - H * 0.10, "#050814", 0.05);
-  mountain(WATER - H * 0.045, "#03050d", 0.035);
+/* ---------- 湖面 ---------- */
+{
+  const g = new THREE.PlaneGeometry(1200, 700);
+  const m = new THREE.MeshBasicMaterial({ color:0x060b1c });
+  const water = new THREE.Mesh(g, m);
+  water.rotation.x = -Math.PI/2;
+  water.position.y = 0;
+  water.renderOrder = 1;
+  scene.add(water);
+}
 
-  // 湖面
-  const lake = bgX.createLinearGradient(0, WATER, 0, H);
-  lake.addColorStop(0, "#0a0f24");
-  lake.addColorStop(1, "#01020a");
-  bgX.fillStyle = lake;
-  bgX.fillRect(0, WATER, W, H - WATER);
-
-  // 対岸の街灯り
-  for (let i = 0; i < 26; i++){
-    const x = Math.random() * W;
-    const warm = Math.random() < 0.7;
-    bgX.fillStyle = warm ? "rgba(255,190,110,.8)" : "rgba(160,200,255,.7)";
-    bgX.fillRect(x, WATER - 2 - Math.random() * 3, 1.6, 1.6);
-    // 灯りの湖面反射
-    bgX.fillStyle = warm ? "rgba(255,190,110,.12)" : "rgba(160,200,255,.1)";
-    bgX.fillRect(x - 0.5, WATER + 2, 2.4, 14 + Math.random() * 22);
+/* ---------- 遠景の山並み ---------- */
+{
+  const mat = new THREE.MeshBasicMaterial({ color:0x050914 });
+  for (let i=0;i<14;i++){
+    const h = rnd(16, 42), r = rnd(30, 75);
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(r, h, 7), mat);
+    const a = rnd(0, Math.PI*2);
+    const d = rnd(190, 300);
+    cone.position.set(Math.sin(a)*d, h/2 - 1, Math.cos(a)*d);
+    scene.add(cone);
   }
 }
-function mountain(baseY, color, amp){
-  bgX.fillStyle = color;
-  bgX.beginPath();
-  bgX.moveTo(0, baseY);
-  let y = baseY;
-  for (let x = 0; x <= W; x += 24){
-    y += (Math.random() - 0.5) * H * amp;
-    y = Math.min(baseY + H * 0.02, Math.max(baseY - H * 0.09, y));
-    bgX.lineTo(x, y);
+
+/* ---------- 対岸の街灯り ---------- */
+{
+  const n = 110, pos = new Float32Array(n*3), col = new Float32Array(n*3);
+  for (let i=0;i<n;i++){
+    const a = rnd(0, Math.PI*2), d = rnd(150, 240);
+    pos[i*3] = Math.sin(a)*d; pos[i*3+1] = rnd(0.6, 2.4); pos[i*3+2] = Math.cos(a)*d;
+    const warm = Math.random() < 0.72;
+    col[i*3] = warm?1:0.62; col[i*3+1] = warm?0.72:0.78; col[i*3+2] = warm?0.4:1;
   }
-  bgX.lineTo(W, WATER); bgX.lineTo(0, WATER);
-  bgX.closePath(); bgX.fill();
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.BufferAttribute(pos,3));
+  g.setAttribute("color", new THREE.BufferAttribute(col,3));
+  const m = new THREE.PointsMaterial({ vertexColors:true, size:1.5, sizeAttenuation:true,
+    transparent:true, opacity:0.9, depthWrite:false });
+  const lights = new THREE.Points(g, m);
+  scene.add(lights);
+  const mirror = new THREE.Points(g, new THREE.PointsMaterial({ vertexColors:true, size:1.5,
+    sizeAttenuation:true, transparent:true, opacity:0.28, depthWrite:false, depthTest:false }));
+  mirror.scale.y = -1; mirror.renderOrder = 2;
+  scene.add(mirror);
+}
+
+/* ---------- 花火パーティクルシステム ---------- */
+const MAX = 11000;
+const pGeo = new THREE.BufferGeometry();
+const aPos  = new Float32Array(MAX*3);
+const aCol  = new Float32Array(MAX*3);
+const aSize = new Float32Array(MAX);
+const aLife = new Float32Array(MAX);
+pGeo.setAttribute("position", new THREE.BufferAttribute(aPos,3).setUsage(THREE.DynamicDrawUsage));
+pGeo.setAttribute("color",    new THREE.BufferAttribute(aCol,3).setUsage(THREE.DynamicDrawUsage));
+pGeo.setAttribute("size",     new THREE.BufferAttribute(aSize,1).setUsage(THREE.DynamicDrawUsage));
+pGeo.setAttribute("alife",    new THREE.BufferAttribute(aLife,1).setUsage(THREE.DynamicDrawUsage));
+
+// 物理量(CPU側)
+const vX = new Float32Array(MAX), vY = new Float32Array(MAX), vZ = new Float32Array(MAX);
+const pDecay = new Float32Array(MAX), pGrav = new Float32Array(MAX), pFric = new Float32Array(MAX);
+const pFlick = new Uint8Array(MAX), pTrail = new Uint8Array(MAX), pBaseLife = new Float32Array(MAX);
+const free = []; for (let i=MAX-1;i>=0;i--) free.push(i);
+
+function makeMat(alpha){
+  return new THREE.ShaderMaterial({
+    transparent:true, depthWrite:false, depthTest:false,
+    blending:THREE.AdditiveBlending, fog:false,
+    uniforms:{ uAlpha:{ value:alpha } },
+    vertexShader:`
+      attribute float size;
+      attribute float alife;
+      varying float vLife;
+      varying vec3 vColor;
+      void main(){
+        vLife = alife; vColor = color;
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        float s = size * (0.45 + 0.55*alife);
+        gl_PointSize = s * (260.0 / max(1.0, -mv.z));
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader:`
+      uniform float uAlpha;
+      varying float vLife;
+      varying vec3 vColor;
+      void main(){
+        if (vLife <= 0.0) discard;
+        vec2 uv = gl_PointCoord - 0.5;
+        float d = length(uv) * 2.0;
+        float a = smoothstep(1.0, 0.0, d);
+        a *= a;
+        gl_FragColor = vec4(vColor * (0.6 + 0.9*vLife), a * vLife * uAlpha);
+      }`,
+    vertexColors:true,
+  });
+}
+const points = new THREE.Points(pGeo, makeMat(1.0));
+points.frustumCulled = false; points.renderOrder = 10;
+scene.add(points);
+
+// 湖面リフレクション: 同じジオメトリをY反転して淡く描く
+const mirrorPts = new THREE.Points(pGeo, makeMat(0.30));
+mirrorPts.frustumCulled = false; mirrorPts.renderOrder = 3;
+mirrorPts.scale.y = -1;
+scene.add(mirrorPts);
+
+const tmpColor = new THREE.Color();
+function spawn(x,y,z, vx,vy,vz, o){
+  if (!free.length) return;
+  const i = free.pop();
+  aPos[i*3]=x; aPos[i*3+1]=y; aPos[i*3+2]=z;
+  vX[i]=vx; vY[i]=vy; vZ[i]=vz;
+  tmpColor.setHSL(o.h/360, o.s ?? 1, o.l ?? 0.6);
+  aCol[i*3]=tmpColor.r; aCol[i*3+1]=tmpColor.g; aCol[i*3+2]=tmpColor.b;
+  aSize[i] = o.size; aLife[i] = 1; pBaseLife[i] = 1;
+  pDecay[i]=o.decay; pGrav[i]=o.gravity; pFric[i]=o.friction;
+  pFlick[i]=o.flicker?1:0; pTrail[i]=o.trail?1:0;
 }
 
 /* ---------- サウンド(WebAudio合成) ---------- */
-let audio = null, soundOn = false;
-function initAudio(){
-  if (audio) return;
-  audio = new (window.AudioContext || window.webkitAudioContext)();
-}
-function boom(size = 1, delay = 0){
-  if (!soundOn || !audio) return;
+let audio=null, soundOn=false;
+function initAudio(){ if(!audio) audio = new (window.AudioContext||window.webkitAudioContext)(); }
+function boom(size=1, delay=0){
+  if(!soundOn||!audio) return;
   const t = audio.currentTime + delay;
-  // ドンという低音
-  const osc = audio.createOscillator(), og = audio.createGain();
-  osc.type = "sine";
-  osc.frequency.setValueAtTime(120 * size, t);
-  osc.frequency.exponentialRampToValueAtTime(32, t + 0.5);
-  og.gain.setValueAtTime(0.55 * size, t);
-  og.gain.exponentialRampToValueAtTime(0.001, t + 0.9);
+  const osc=audio.createOscillator(), og=audio.createGain();
+  osc.type="sine";
+  osc.frequency.setValueAtTime(120*size, t);
+  osc.frequency.exponentialRampToValueAtTime(32, t+0.5);
+  og.gain.setValueAtTime(0.55*size, t);
+  og.gain.exponentialRampToValueAtTime(0.001, t+0.9);
   osc.connect(og).connect(audio.destination);
-  osc.start(t); osc.stop(t + 1);
-  // パラパラという破裂ノイズ
-  const len = audio.sampleRate * 1.3;
-  const buf = audio.createBuffer(1, len, audio.sampleRate);
-  const d = buf.getChannelData(0);
-  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.4);
-  const src = audio.createBufferSource(); src.buffer = buf;
-  const f = audio.createBiquadFilter();
-  f.type = "lowpass"; f.frequency.setValueAtTime(2600, t);
-  f.frequency.exponentialRampToValueAtTime(300, t + 1.1);
-  const ng = audio.createGain(); ng.gain.value = 0.4 * size;
+  osc.start(t); osc.stop(t+1);
+  const len=audio.sampleRate*1.3, buf=audio.createBuffer(1,len,audio.sampleRate), d=buf.getChannelData(0);
+  for(let i=0;i<len;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/len,2.4);
+  const src=audio.createBufferSource(); src.buffer=buf;
+  const f=audio.createBiquadFilter(); f.type="lowpass";
+  f.frequency.setValueAtTime(2600,t);
+  f.frequency.exponentialRampToValueAtTime(300,t+1.1);
+  const ng=audio.createGain(); ng.gain.value=0.4*size;
   src.connect(f).connect(ng).connect(audio.destination);
   src.start(t);
 }
 function launchHiss(){
-  if (!soundOn || !audio) return;
-  const t = audio.currentTime;
-  const len = audio.sampleRate * 0.7;
-  const buf = audio.createBuffer(1, len, audio.sampleRate);
-  const d = buf.getChannelData(0);
-  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len) * 0.3;
-  const src = audio.createBufferSource(); src.buffer = buf;
-  const f = audio.createBiquadFilter(); f.type = "highpass"; f.frequency.value = 1800;
-  const g = audio.createGain(); g.gain.value = 0.08;
+  if(!soundOn||!audio) return;
+  const t=audio.currentTime, len=audio.sampleRate*0.7;
+  const buf=audio.createBuffer(1,len,audio.sampleRate), d=buf.getChannelData(0);
+  for(let i=0;i<len;i++) d[i]=(Math.random()*2-1)*(1-i/len)*0.3;
+  const src=audio.createBufferSource(); src.buffer=buf;
+  const f=audio.createBiquadFilter(); f.type="highpass"; f.frequency.value=1800;
+  const g=audio.createGain(); g.gain.value=0.08;
   src.connect(f).connect(g).connect(audio.destination);
   src.start(t);
 }
 
-/* ---------- 花火の種類定義 ---------- */
+/* ---------- 花火の種類 ---------- */
 const TYPES = {
-  kiku: {
-    nm:"菊", yomi:"きく", dot:"#ffd27a",
-    count:150, speed:[2.2, 8.4], gravity:0.028, friction:0.986,
-    decay:[0.006, 0.010], hueMode:"gold", trail:true, flicker:true, size:1.9,
-  },
-  botan: {
-    nm:"牡丹", yomi:"ぼたん", dot:"#ff6ea8",
-    count:130, speed:[2.4, 9.0], gravity:0.03, friction:0.982,
-    decay:[0.010, 0.016], hueMode:"vivid", trail:false, flicker:false, size:2.3,
-  },
-  yanagi: {
-    nm:"枝垂柳", yomi:"しだれやなぎ", dot:"#ffe9b0",
-    count:95, speed:[1.6, 6.2], gravity:0.016, friction:0.993,
-    decay:[0.0028, 0.0045], hueMode:"amber", trail:true, flicker:true, size:1.6,
-  },
-  kamuro: {
-    nm:"冠菊", yomi:"かむろ", dot:"#ffc44d",
-    count:190, speed:[2.0, 7.6], gravity:0.024, friction:0.99,
-    decay:[0.004, 0.006], hueMode:"gold", trail:true, flicker:true, size:1.7,
-  },
-  senrin: {
-    nm:"千輪", yomi:"せんりん", dot:"#8fd0ff",
-    sub:true,
-  },
-  heart: {
-    nm:"型物", yomi:"ハート", dot:"#ff5d7e",
-    shape:true,
-  },
-  starmine: {
-    nm:"大スターマイン", yomi:"だいすたーまいん", dot:"#c7a6ff",
-    mine:true,
-  },
+  kiku:   { nm:"菊", yomi:"きく", dot:"#ffd27a",
+            count:230, speed:[0.14,0.62], gravity:0.0055, friction:0.977,
+            decay:[0.0055,0.009], hueMode:"gold", trail:true, flicker:true, size:2.0 },
+  botan:  { nm:"牡丹", yomi:"ぼたん", dot:"#ff6ea8",
+            count:200, speed:[0.16,0.68], gravity:0.006, friction:0.972,
+            decay:[0.009,0.015], hueMode:"vivid", trail:false, flicker:false, size:2.5 },
+  yanagi: { nm:"枝垂柳", yomi:"しだれやなぎ", dot:"#ffe9b0",
+            count:150, speed:[0.10,0.46], gravity:0.0032, friction:0.988,
+            decay:[0.0026,0.0042], hueMode:"amber", trail:true, flicker:true, size:1.7 },
+  kamuro: { nm:"冠菊", yomi:"かむろ", dot:"#ffc44d",
+            count:280, speed:[0.13,0.56], gravity:0.0048, friction:0.983,
+            decay:[0.0038,0.0058], hueMode:"gold", trail:true, flicker:true, size:1.8 },
+  senrin: { nm:"千輪", yomi:"せんりん", dot:"#8fd0ff", sub:true },
+  heart:  { nm:"型物", yomi:"ハート", dot:"#ff5d7e", shape:true },
+  starmine:{ nm:"大スターマイン", yomi:"だいすたーまいん", dot:"#c7a6ff", mine:true },
 };
 let selected = "starmine";
 
-/* ---------- パーティクル ---------- */
-const shells = [], sparks = [], subs = [], glows = [];
-const MAX_SPARKS = 2600;
-
-function rnd(a, b){ return a + Math.random() * (b - a); }
-
 function hueFor(mode){
-  switch (mode){
-    case "gold":  return rnd(38, 50);
-    case "amber": return rnd(34, 44);
+  switch(mode){
+    case "gold":  return rnd(38,50);
+    case "amber": return rnd(34,44);
     case "vivid": {
-      const base = [350, 320, 275, 210, 185, 130, 55, 18];
-      return base[(Math.random() * base.length) | 0] + rnd(-8, 8);
+      const base=[350,320,275,210,185,130,55,18];
+      return base[(Math.random()*base.length)|0] + rnd(-8,8);
     }
-    default: return rnd(0, 360);
+    default: return rnd(0,360);
   }
 }
 
+/* ---------- 打上玉・小玉 ---------- */
+const shells = [], subs = [];
 class Shell {
-  constructor(tx, ty, type){
+  constructor(tx,ty,tz,type){
     this.type = type;
-    this.x = tx + rnd(-30, 30);
-    this.y = WATER;
-    this.tx = tx; this.ty = ty;
-    const t = 60 + rnd(-6, 6);                 // 到達フレーム数の目安
-    this.vy = -(WATER - ty) / t - 0.5 * 0.052 * t;
-    this.vx = (tx - this.x) / t;
-    this.hue = rnd(30, 50);
+    this.x = tx + rnd(-4,4); this.y = 0; this.z = tz + rnd(-4,4);
+    const T = 72 + rnd(-8,8), g = 0.014;
+    this.vx = (tx-this.x)/T;
+    this.vy = ty/T + 0.5*g*T;
+    this.vz = (tz-this.z)/T;
+    this.g = g; this.ty = ty;
     launchHiss();
   }
   step(){
-    this.vy += 0.052;
-    this.x += this.vx; this.y += this.vy;
-    // 上昇の尾
-    if (Math.random() < 0.85) sparks.push(new Spark(
-      this.x + rnd(-1,1), this.y, rnd(-0.3,0.3), rnd(0.4,1.2),
-      { hue:this.hue, sat:60, decay:rnd(0.05,0.1), size:1.2,
-        gravity:0.02, friction:0.96, trail:false, flicker:false }
-    ));
-    if (this.vy >= -0.8 || this.y <= this.ty){
-      explode(this.x, this.y, this.type);
+    this.vy -= this.g;
+    this.x += this.vx; this.y += this.vy; this.z += this.vz;
+    if (Math.random()<0.9) spawn(this.x+rnd(-0.2,0.2), this.y, this.z+rnd(-0.2,0.2),
+      rnd(-0.02,0.02), rnd(-0.09,-0.03), rnd(-0.02,0.02),
+      { h:44, s:0.7, l:0.62, size:1.1, decay:rnd(0.05,0.09), gravity:0.003, friction:0.95 });
+    if (this.vy <= 0.06 || this.y >= this.ty){
+      explode(this.x, this.y, this.z, this.type);
       return false;
     }
     return true;
   }
-  draw(){
-    fxX.fillStyle = `hsla(${this.hue},70%,80%,.9)`;
-    fxX.beginPath(); fxX.arc(this.x, this.y, 1.6, 0, 7); fxX.fill();
-  }
 }
-
-class Spark {
-  constructor(x, y, vx, vy, o){
-    this.x = x; this.y = y; this.px = x; this.py = y;
-    this.vx = vx; this.vy = vy;
-    this.hue = o.hue; this.sat = o.sat ?? 100;
-    this.life = 1; this.decay = o.decay;
-    this.size = o.size; this.gravity = o.gravity;
-    this.friction = o.friction; this.trail = o.trail;
-    this.flicker = o.flicker;
-  }
-  step(){
-    this.px = this.x; this.py = this.y;
-    this.vx *= this.friction; this.vy *= this.friction;
-    this.vy += this.gravity;
-    this.x += this.vx; this.y += this.vy;
-    this.life -= this.decay;
-    if (this.y > WATER + 4) this.life -= 0.08;   // 着水で消える
-    return this.life > 0;
-  }
-  draw(){
-    let a = Math.max(this.life, 0);
-    if (this.flicker && this.life < 0.75) a *= rnd(0.25, 1);
-    const light = 50 + 30 * this.life;
-    fxX.strokeStyle = `hsla(${this.hue},${this.sat}%,${light}%,${a})`;
-    fxX.lineWidth = this.size * (0.5 + this.life * 0.7);
-    fxX.beginPath();
-    fxX.moveTo(this.px, this.py);
-    fxX.lineTo(this.x, this.y);
-    fxX.stroke();
-  }
-}
-
-/* 千輪用の小玉 */
 class SubShell {
-  constructor(x, y, vx, vy, timer){
-    this.x=x; this.y=y; this.vx=vx; this.vy=vy; this.t=timer;
+  constructor(x,y,z,vx,vy,vz,timer){
+    this.x=x;this.y=y;this.z=z;this.vx=vx;this.vy=vy;this.vz=vz;this.t=timer;
     this.hue = hueFor("vivid");
   }
   step(){
-    this.vx *= 0.985; this.vy = this.vy * 0.985 + 0.03;
-    this.x += this.vx; this.y += this.vy;
+    this.vx*=0.985; this.vz*=0.985; this.vy = this.vy*0.985 - 0.006;
+    this.x+=this.vx; this.y+=this.vy; this.z+=this.vz;
+    spawn(this.x,this.y,this.z, 0,0,0, { h:this.hue, l:0.7, size:1.4, decay:0.14, gravity:0, friction:1 });
     if (--this.t <= 0){
-      burst(this.x, this.y, {
-        count:34, speed:[0.8, 3.4], gravity:0.026, friction:0.985,
-        decay:[0.012, 0.02], hueMode:null, hue:this.hue,
-        trail:false, flicker:false, size:1.8,
-      });
+      burst(this.x,this.y,this.z, { count:52, speed:[0.06,0.26], gravity:0.005, friction:0.972,
+        decay:[0.011,0.019], hue:this.hue, trail:false, flicker:false, size:1.9 });
       boom(0.35);
       return false;
     }
     return true;
   }
-  draw(){
-    fxX.fillStyle = `hsla(${this.hue},80%,75%,.9)`;
-    fxX.beginPath(); fxX.arc(this.x, this.y, 1.4, 0, 7); fxX.fill();
-  }
 }
 
-/* 開花の閃光 */
-class Glow {
-  constructor(x, y, r, hue){ this.x=x; this.y=y; this.r=r; this.hue=hue; this.life=1; }
-  step(){ this.life -= 0.08; return this.life > 0; }
-  draw(){
-    const g = fxX.createRadialGradient(this.x,this.y,0,this.x,this.y,this.r*(1.6-this.life*0.6));
-    g.addColorStop(0, `hsla(${this.hue},70%,85%,${0.5*this.life})`);
-    g.addColorStop(1, "hsla(0,0%,0%,0)");
-    fxX.fillStyle = g;
-    fxX.beginPath(); fxX.arc(this.x,this.y,this.r*1.6,0,7); fxX.fill();
-  }
-}
-
-/* ---------- 爆発ロジック ---------- */
-function burst(x, y, cfg){
-  const budget = Math.max(0, MAX_SPARKS - sparks.length);
-  const n = Math.min(cfg.count, budget);
+/* ---------- 爆発 ---------- */
+function burst(x,y,z,cfg){
+  const n = Math.min(cfg.count, free.length);
   const baseHue = cfg.hue ?? hueFor(cfg.hueMode);
-  for (let i = 0; i < n; i++){
-    // 3D球面分布 → 2D投影で立体感を出す
-    const th = Math.random() * Math.PI * 2;
-    const ph = Math.acos(rnd(-1, 1));
+  for (let i=0;i<n;i++){
+    // 一様な3D球面分布
+    const u = rnd(-1,1), th = rnd(0,Math.PI*2);
+    const s = Math.sqrt(1-u*u);
     const sp = rnd(cfg.speed[0], cfg.speed[1]);
-    const vx = sp * Math.sin(ph) * Math.cos(th);
-    const vy = sp * Math.sin(ph) * Math.sin(th);
-    const hue = cfg.hueMode ? (cfg.hueMode === "vivid" ? baseHue + rnd(-6,6) : hueFor(cfg.hueMode)) : baseHue + rnd(-6,6);
-    sparks.push(new Spark(x, y, vx, vy, {
-      hue, decay: rnd(cfg.decay[0], cfg.decay[1]),
-      size: cfg.size, gravity: cfg.gravity, friction: cfg.friction,
-      trail: cfg.trail, flicker: cfg.flicker,
-    }));
+    const hue = cfg.hueMode==="gold"||cfg.hueMode==="amber" ? hueFor(cfg.hueMode) : baseHue + rnd(-6,6);
+    spawn(x,y,z, s*Math.cos(th)*sp, u*sp, s*Math.sin(th)*sp, {
+      h:hue, decay:rnd(cfg.decay[0],cfg.decay[1]), size:cfg.size,
+      gravity:cfg.gravity, friction:cfg.friction, trail:cfg.trail, flicker:cfg.flicker,
+    });
   }
 }
-
-function explode(x, y, key){
+function flash(x,y,z,hue){
+  spawn(x,y,z, 0,0,0, { h:hue, s:0.6, l:0.85, size:34, decay:0.11, gravity:0, friction:1 });
+}
+const camRight = new THREE.Vector3(), camUp = new THREE.Vector3();
+function explode(x,y,z,key){
   const t = TYPES[key];
   showName(t);
-  if (t.sub){            // 千輪:小玉に分裂して時間差で開花
-    glows.push(new Glow(x, y, 40, 45));
-    boom(0.5);
-    for (let i = 0; i < 11; i++){
-      const a = Math.random() * Math.PI * 2;
-      const sp = rnd(1.4, 3.6);
-      subs.push(new SubShell(x, y, Math.cos(a)*sp, Math.sin(a)*sp*0.8, 26 + rnd(0, 22)));
+  if (t.sub){
+    flash(x,y,z,45); boom(0.5);
+    for (let i=0;i<13;i++){
+      const u=rnd(-1,1), th=rnd(0,Math.PI*2), s=Math.sqrt(1-u*u), sp=rnd(0.10,0.3);
+      subs.push(new SubShell(x,y,z, s*Math.cos(th)*sp, u*sp*0.8, s*Math.sin(th)*sp, 28+rnd(0,24)));
     }
     return;
   }
-  if (t.shape){          // 型物(ハート)
-    glows.push(new Glow(x, y, 60, 345));
-    boom(0.8);
-    const hue = 345 + rnd(-8, 8);
-    for (let i = 0; i < 110; i++){
-      const a = (i / 110) * Math.PI * 2;
-      let hx = 16 * Math.pow(Math.sin(a), 3);
-      let hy = -(13*Math.cos(a) - 5*Math.cos(2*a) - 2*Math.cos(3*a) - Math.cos(4*a));
-      const sp = 0.36 * rnd(0.95, 1.05);
-      sparks.push(new Spark(x, y, hx*sp, hy*sp, {
-        hue, decay: rnd(0.008, 0.012), size: 2.1,
-        gravity: 0.012, friction: 0.985, trail:false, flicker:false,
-      }));
+  if (t.shape){
+    flash(x,y,z,345); boom(0.8);
+    // カメラに正対する平面上にハートを描く
+    camRight.setFromMatrixColumn(camera.matrixWorld, 0);
+    camUp.setFromMatrixColumn(camera.matrixWorld, 1);
+    const hue = 345 + rnd(-8,8);
+    for (let i=0;i<130;i++){
+      const a = (i/130)*Math.PI*2;
+      const hx = 16*Math.pow(Math.sin(a),3);
+      const hy = 13*Math.cos(a) - 5*Math.cos(2*a) - 2*Math.cos(3*a) - Math.cos(4*a);
+      const sp = 0.026*rnd(0.95,1.05);
+      const vx = (camRight.x*hx + camUp.x*hy)*sp;
+      const vy = (camRight.y*hx + camUp.y*hy)*sp;
+      const vz = (camRight.z*hx + camUp.z*hy)*sp;
+      spawn(x,y,z, vx,vy,vz, { h:hue, decay:rnd(0.008,0.012), size:2.2,
+        gravity:0.0022, friction:0.982, trail:false, flicker:false });
     }
     return;
   }
-  glows.push(new Glow(x, y, 40 + t.count * 0.35, t.hueMode === "vivid" ? hueFor("vivid") : 45));
-  boom(Math.min(1.2, t.count / 150));
-  burst(x, y, t);
-  // 菊・冠菊には芯(内側の色替え)を入れる
-  if (key === "kiku" || key === "kamuro"){
-    burst(x, y, {
-      count: 40, speed:[0.6, 3.0], gravity:0.024, friction:0.985,
-      decay:[0.012, 0.018], hueMode:"vivid",
-      trail:false, flicker:false, size:2.0,
-    });
+  flash(x,y,z, t.hueMode==="vivid" ? hueFor("vivid") : 45);
+  boom(Math.min(1.2, t.count/220));
+  burst(x,y,z,t);
+  if (key==="kiku"||key==="kamuro"){
+    burst(x,y,z,{ count:60, speed:[0.04,0.22], gravity:0.0045, friction:0.975,
+      decay:[0.011,0.017], hueMode:"vivid", trail:false, flicker:false, size:2.1 });
   }
 }
 
 /* ---------- 大スターマイン ---------- */
-const queue = [];   // {frame, x, y, type}
-let frame = 0;
-function starmine(cx){
+const queue = []; let frame = 0;
+function starmine(cx,cz){
   const base = frame;
-  const keys = ["botan", "kiku", "botan", "kamuro", "botan", "kiku"];
+  const keys = ["botan","kiku","botan","kamuro","botan","kiku"];
   let f = 0;
-  // 序:速射
-  for (let i = 0; i < 14; i++){
-    queue.push({ frame: base + f, x: cx + rnd(-W*0.3, W*0.3), y: rnd(H*0.24, H*0.5), type: keys[(Math.random()*keys.length)|0] });
-    f += 7 + rnd(0, 7);
+  for (let i=0;i<14;i++){   // 序:速射
+    queue.push({ frame:base+f, x:cx+rnd(-34,34), y:rnd(22,40), z:cz+rnd(-16,16),
+      type:keys[(Math.random()*keys.length)|0] });
+    f += 7 + rnd(0,7);
   }
-  // 破:柳と千輪を混ぜる
-  for (let i = 0; i < 6; i++){
-    queue.push({ frame: base + f, x: cx + rnd(-W*0.35, W*0.35), y: rnd(H*0.2, H*0.42), type: Math.random()<0.5 ? "yanagi" : "senrin" });
-    f += 16 + rnd(0, 10);
+  for (let i=0;i<6;i++){    // 破:柳と千輪
+    queue.push({ frame:base+f, x:cx+rnd(-38,38), y:rnd(26,44), z:cz+rnd(-18,18),
+      type:Math.random()<0.5?"yanagi":"senrin" });
+    f += 16 + rnd(0,10);
   }
-  // 急:同時多発のフィナーレ
-  for (let i = 0; i < 10; i++){
-    queue.push({ frame: base + f + rnd(0, 8), x: cx + rnd(-W*0.4, W*0.4), y: rnd(H*0.18, H*0.4), type: keys[(Math.random()*keys.length)|0] });
+  for (let i=0;i<10;i++){   // 急:同時多発フィナーレ
+    queue.push({ frame:base+f+rnd(0,8), x:cx+rnd(-44,44), y:rnd(24,46), z:cz+rnd(-20,20),
+      type:keys[(Math.random()*keys.length)|0] });
   }
-  queue.push({ frame: base + f + 26, x: cx, y: H*0.22, type: "kamuro" });
+  queue.push({ frame:base+f+26, x:cx, y:46, z:cz, type:"kamuro" });
 }
 
-/* ---------- 打ち上げ ---------- */
-function launch(x, y){
-  x = Math.min(Math.max(x, W*0.08), W*0.92);
-  y = Math.min(Math.max(y, H*0.12), H*0.55);
-  if (selected === "starmine"){ starmine(x); return; }
-  shells.push(new Shell(x, y, selected));
+/* ---------- 打上 ---------- */
+const raycaster = new THREE.Raycaster();
+const tapPlane = new THREE.Plane();
+const tapPoint = new THREE.Vector3();
+const camDir = new THREE.Vector3();
+function launchAtScreen(px,py){
+  const ndc = new THREE.Vector2((px/innerWidth)*2-1, -(py/innerHeight)*2+1);
+  raycaster.setFromCamera(ndc, camera);
+  camera.getWorldDirection(camDir);
+  tapPlane.setFromNormalAndCoplanarPoint(camDir.negate(), camTarget.clone().setY(26));
+  if (!raycaster.ray.intersectPlane(tapPlane, tapPoint)) tapPoint.set(0,30,0);
+  const x = Math.min(52, Math.max(-52, tapPoint.x));
+  const y = Math.min(48, Math.max(16, tapPoint.y));
+  const z = Math.min(30, Math.max(-30, tapPoint.z));
+  if (selected === "starmine"){ starmine(x, z); return; }
+  shells.push(new Shell(x, y, z, selected));
+}
+function launchRandom(type){
+  const prev = selected; selected = type;
+  const a = rnd(0,Math.PI*2), d = rnd(0,34);
+  if (type==="starmine") starmine(rnd(-14,14), rnd(-10,10));
+  else shells.push(new Shell(Math.sin(a)*d, rnd(22,44), Math.cos(a)*d*0.6, type));
+  selected = prev;
 }
 
-/* ---------- メインループ ---------- */
-let autoOn = false, autoTimer = 0;
-function loop(){
-  requestAnimationFrame(loop);
-  frame++;
-
-  // 残像フェード(destination-outで透明化して夜景を透かす)
-  fxX.globalCompositeOperation = "destination-out";
-  fxX.fillStyle = "rgba(0,0,0,0.16)";
-  fxX.fillRect(0, 0, W, H);
-  fxX.globalCompositeOperation = "lighter";
-
-  // キュー消化(スターマイン)
-  for (let i = queue.length - 1; i >= 0; i--){
-    if (queue[i].frame <= frame){
-      const q = queue.splice(i, 1)[0];
-      shells.push(new Shell(q.x, q.y, q.type));
-    }
+/* ---------- 視点操作(ドラッグ回転・ピンチズーム・タップ判定) ---------- */
+const pointers = new Map();
+let downX=0, downY=0, downT=0, moved=0, pinchD=0, dragging=false;
+const cv = renderer.domElement;
+cv.addEventListener("pointerdown", e => {
+  cv.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+  if (pointers.size === 1){
+    downX=e.clientX; downY=e.clientY; downT=performance.now(); moved=0; dragging=true;
+  } else if (pointers.size === 2){
+    const p = [...pointers.values()];
+    pinchD = Math.hypot(p[0].x-p[1].x, p[0].y-p[1].y);
   }
-
-  for (let i = shells.length - 1; i >= 0; i--){
-    if (!shells[i].step()) shells.splice(i, 1); else shells[i].draw();
+  initAudio();
+  if (audio && audio.state==="suspended") audio.resume();
+});
+cv.addEventListener("pointermove", e => {
+  if (!pointers.has(e.pointerId)) return;
+  const prev = pointers.get(e.pointerId);
+  const dx = e.clientX-prev.x, dy = e.clientY-prev.y;
+  pointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+  moved += Math.abs(dx)+Math.abs(dy);
+  if (pointers.size === 1 && dragging){
+    camTheta -= dx*0.005;
+    camPhi   += dy*0.003;
+    updateCamera();
+  } else if (pointers.size === 2){
+    const p = [...pointers.values()];
+    const d = Math.hypot(p[0].x-p[1].x, p[0].y-p[1].y);
+    if (pinchD > 0){ camDist *= pinchD/d; updateCamera(); }
+    pinchD = d;
   }
-  for (let i = subs.length - 1; i >= 0; i--){
-    if (!subs[i].step()) subs.splice(i, 1); else subs[i].draw();
-  }
-  for (let i = glows.length - 1; i >= 0; i--){
-    if (!glows[i].step()) glows.splice(i, 1); else glows[i].draw();
-  }
-  for (let i = sparks.length - 1; i >= 0; i--){
-    if (!sparks[i].step()) sparks.splice(i, 1); else sparks[i].draw();
-  }
-
-  // 湖面反射(fxキャンバスを上下反転・減光して水面に描画)
-  reX.clearRect(0, WATER, W, H - WATER);
-  reX.save();
-  reX.globalAlpha = 0.26;
-  reX.translate(0, WATER * 2);
-  reX.scale(1, -1);
-  reX.drawImage(fxC, 0, 0, W * DPR, WATER * DPR, 0, WATER * 0.35, W, WATER * 0.65);
-  reX.restore();
-
-  // 自動打上
-  if (autoOn && --autoTimer <= 0){
-    const keys = ["kiku","botan","yanagi","kamuro","senrin","heart"];
-    const pick = Math.random() < 0.12 ? "starmine" : keys[(Math.random()*keys.length)|0];
-    const prev = selected; selected = pick;
-    launch(rnd(W*0.2, W*0.8), rnd(H*0.18, H*0.45));
-    selected = prev;
-    autoTimer = pick === "starmine" ? 460 : (reduceMotion ? 210 : 90 + rnd(0, 80));
+});
+function endPointer(e){
+  if (pointers.has(e.pointerId)) pointers.delete(e.pointerId);
+  if (pointers.size < 2) pinchD = 0;
+  if (pointers.size === 0 && dragging){
+    dragging = false;
+    const quick = performance.now()-downT < 350;
+    if (quick && moved < 10){ launchAtScreen(downX, downY); hideHint(); }
   }
 }
+cv.addEventListener("pointerup", endPointer);
+cv.addEventListener("pointercancel", endPointer);
+cv.addEventListener("wheel", e => {   // PCマウスホイールでズーム
+  camDist *= 1 + Math.sign(e.deltaY)*0.08;
+  updateCamera();
+}, { passive:true });
 
 /* ---------- UI ---------- */
 const rail = document.getElementById("rail");
 const nameEl = document.getElementById("tamana");
 const hint = document.getElementById("hint");
-let nameTimer = null, hintShown = true;
-
+let nameTimer=null, hintShown=true;
 const ORDER = ["starmine","kiku","botan","yanagi","kamuro","senrin","heart"];
 for (const key of ORDER){
   const t = TYPES[key];
   const b = document.createElement("button");
-  b.className = "tama" + (key === selected ? " sel" : "");
+  b.className = "tama" + (key===selected ? " sel" : "");
   b.style.setProperty("--c", t.dot);
   b.innerHTML = `<span class="dot"></span><span class="nm">${t.nm}</span><span class="yomi">${t.yomi}</span>`;
   b.addEventListener("click", () => {
     selected = key;
     document.querySelectorAll(".tama").forEach(el => el.classList.remove("sel"));
     b.classList.add("sel");
-    launch(W * 0.5, H * 0.3);   // 選んだ瞬間に一発お手本
+    launchRandom(key);
     hideHint();
   });
   rail.appendChild(b);
 }
-
 function showName(t){
-  nameEl.textContent = t.nm === "型物" ? "型物・ハート" : t.nm;
+  nameEl.textContent = t.nm==="型物" ? "型物・ハート" : t.nm;
   nameEl.classList.add("show");
   clearTimeout(nameTimer);
-  nameTimer = setTimeout(() => nameEl.classList.remove("show"), 1600);
+  nameTimer = setTimeout(()=>nameEl.classList.remove("show"), 1600);
 }
-function hideHint(){
-  if (!hintShown) return;
-  hintShown = false;
-  hint.classList.add("hide");
-}
+function hideHint(){ if(!hintShown) return; hintShown=false; hint.classList.add("hide"); }
 
-fxC.addEventListener("pointerdown", e => {
-  initAudio();
-  if (audio && audio.state === "suspended") audio.resume();
-  launch(e.clientX, e.clientY);
-  hideHint();
-});
-
+let autoOn=false, autoTimer=0;
 document.getElementById("swAuto").addEventListener("click", function(){
-  autoOn = !autoOn; autoTimer = 0;
+  autoOn=!autoOn; autoTimer=0;
   this.classList.toggle("on", autoOn);
-  this.textContent = "自動打上 " + (autoOn ? "ON" : "OFF");
+  this.textContent = "自動打上 " + (autoOn?"ON":"OFF");
   this.setAttribute("aria-pressed", autoOn);
   hideHint();
 });
 document.getElementById("swSnd").addEventListener("click", function(){
   initAudio();
-  if (audio && audio.state === "suspended") audio.resume();
-  soundOn = !soundOn;
+  if (audio && audio.state==="suspended") audio.resume();
+  soundOn=!soundOn;
   this.classList.toggle("on", soundOn);
-  this.textContent = "音 " + (soundOn ? "ON" : "OFF");
+  this.textContent = "音 " + (soundOn?"ON":"OFF");
   this.setAttribute("aria-pressed", soundOn);
 });
 
-/* ---------- 起動 ---------- */
-resize();
+/* ---------- メインループ ---------- */
+function loop(){
+  requestAnimationFrame(loop);
+  frame++;
+
+  // スターマイン発射キュー
+  for (let i=queue.length-1;i>=0;i--){
+    if (queue[i].frame <= frame){
+      const q = queue.splice(i,1)[0];
+      shells.push(new Shell(q.x, q.y, q.z, q.type));
+    }
+  }
+  for (let i=shells.length-1;i>=0;i--) if(!shells[i].step()) shells.splice(i,1);
+  for (let i=subs.length-1;i>=0;i--)   if(!subs[i].step())   subs.splice(i,1);
+
+  // パーティクル物理更新(実寿命=pBaseLife / 表示寿命=aLife)
+  for (let i=0;i<MAX;i++){
+    if (pBaseLife[i] <= 0) continue;
+    vX[i]*=pFric[i]; vY[i]*=pFric[i]; vZ[i]*=pFric[i];
+    vY[i]-=pGrav[i];
+    aPos[i*3]+=vX[i]; aPos[i*3+1]+=vY[i]; aPos[i*3+2]+=vZ[i];
+    let life = pBaseLife[i] - pDecay[i];
+    if (aPos[i*3+1] < 0.3) life -= 0.08;          // 着水で消える
+    if (pTrail[i] && life>0.15 && Math.random()<0.22 && free.length>600){
+      spawn(aPos[i*3],aPos[i*3+1],aPos[i*3+2], 0,0.002,0,
+        { h:44, s:0.75, l:0.5, size:1.0, decay:rnd(0.05,0.09), gravity:0.001, friction:1 });
+    }
+    if (life <= 0){ pBaseLife[i]=0; aLife[i]=0; free.push(i); continue; }
+    pBaseLife[i] = life;
+    aLife[i] = pFlick[i] && life<0.75 ? life*rnd(0.35,1) : life;
+  }
+
+  pGeo.attributes.position.needsUpdate = true;
+  pGeo.attributes.color.needsUpdate = true;
+  pGeo.attributes.size.needsUpdate = true;
+  pGeo.attributes.alife.needsUpdate = true;
+
+  // 自動打上
+  if (autoOn && --autoTimer <= 0){
+    const keys=["kiku","botan","yanagi","kamuro","senrin","heart"];
+    const pick = Math.random()<0.12 ? "starmine" : keys[(Math.random()*keys.length)|0];
+    launchRandom(pick);
+    autoTimer = pick==="starmine" ? 460 : (reduceMotion ? 210 : 90+rnd(0,80));
+  }
+  // 誰も触っていないときの微小な視点ドリフト
+  if (!dragging && !reduceMotion){ camTheta += 0.00035; updateCamera(); }
+
+  renderer.render(scene, camera);
+}
 loop();
+
 // オープニングに一発
-setTimeout(() => { const p = selected; selected = "kiku"; launch(W*0.5, H*0.28); selected = p; }, 700);
+setTimeout(()=>launchRandom("kiku"), 700);
 </script>
 </body>
 </html>

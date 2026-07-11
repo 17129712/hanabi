@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>湖上花火大会 3D — リアル花火シミュレーター</title>
+<meta name="description" content="スマホで楽しめる3Dリアル花火シミュレーター。ドラッグで見回し、タップで大スターマインや菊・牡丹を打ち上げよう。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;700&family=Zen+Kaku+Gothic+New:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#e9ecf5;
+    --ink-dim:#8b93ab;
+    --night:#04060f;
+    --lantern:#ffb45c;
+    --glass:rgba(10,14,28,.62);
+    --line:rgba(233,236,245,.14);
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;background:var(--night)}
+  body{
+    font-family:"Zen Kaku Gothic New",system-ui,sans-serif;
+    color:var(--ink);
+    touch-action:none;
+    user-select:none;-webkit-user-select:none;
+  }
+  #stage{position:fixed;inset:0;z-index:0}
+
+  header{
+    position:fixed;z-index:10;top:0;left:0;right:0;
+    padding:calc(env(safe-area-inset-top) + 14px) 18px 10px;
+    display:flex;align-items:flex-start;justify-content:space-between;
+    pointer-events:none;
+    background:linear-gradient(to bottom,rgba(4,6,15,.75),transparent);
+  }
+  .title h1{
+    font-family:"Shippori Mincho",serif;font-weight:700;
+    font-size:clamp(19px,4.6vw,26px);letter-spacing:.32em;
+    text-shadow:0 0 18px rgba(255,180,92,.35);
+  }
+  .title p{font-size:11px;letter-spacing:.18em;color:var(--ink-dim);margin-top:4px}
+  .switches{display:flex;gap:8px;pointer-events:auto}
+  .sw{
+    font-family:inherit;font-size:11.5px;letter-spacing:.06em;color:var(--ink-dim);
+    background:var(--glass);border:1px solid var(--line);border-radius:999px;
+    padding:8px 13px;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+    cursor:pointer;transition:color .2s,border-color .2s,box-shadow .2s;
+  }
+  .sw.on{
+    color:var(--lantern);border-color:rgba(255,180,92,.55);
+    box-shadow:0 0 14px rgba(255,180,92,.25) inset,0 0 10px rgba(255,180,92,.15);
+  }
+  .sw:focus-visible{outline:2px solid var(--lantern);outline-offset:2px}
+
+  #hint{
+    position:fixed;z-index:9;left:50%;top:40%;transform:translate(-50%,-50%);
+    text-align:center;pointer-events:none;transition:opacity 1s;
+  }
+  #hint .ring{
+    width:58px;height:58px;margin:0 auto 14px;border-radius:50%;
+    border:1px solid rgba(233,236,245,.4);
+    animation:pulse 2.2s ease-out infinite;
+  }
+  @keyframes pulse{
+    0%{transform:scale(.6);opacity:.9}
+    70%{transform:scale(1.25);opacity:0}
+    100%{transform:scale(1.25);opacity:0}
+  }
+  #hint p{font-size:12.5px;letter-spacing:.24em;color:var(--ink-dim);line-height:2}
+  #hint.hide{opacity:0}
+
+  #tamana{
+    position:fixed;z-index:9;left:50%;bottom:calc(env(safe-area-inset-bottom) + 132px);
+    transform:translateX(-50%);
+    font-family:"Shippori Mincho",serif;font-size:15px;letter-spacing:.4em;
+    color:rgba(233,236,245,.92);text-shadow:0 0 12px rgba(255,180,92,.4);
+    opacity:0;transition:opacity .5s;pointer-events:none;white-space:nowrap;
+    padding-left:.4em;
+  }
+  #tamana.show{opacity:1}
+
+  nav{
+    position:fixed;z-index:10;left:0;right:0;bottom:0;
+    padding:12px 14px calc(env(safe-area-inset-bottom) + 14px);
+    background:linear-gradient(to top,rgba(4,6,15,.88) 40%,transparent);
+  }
+  .rail{
+    display:flex;gap:9px;overflow-x:auto;scrollbar-width:none;
+    padding:4px 2px;scroll-snap-type:x proximity;
+    touch-action:pan-x;
+  }
+  .rail::-webkit-scrollbar{display:none}
+  .tama{
+    flex:0 0 auto;scroll-snap-align:center;
+    display:flex;flex-direction:column;align-items:center;gap:3px;
+    font-family:inherit;cursor:pointer;
+    background:var(--glass);border:1px solid var(--line);border-radius:14px;
+    padding:10px 15px 9px;min-width:86px;
+    backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+    color:var(--ink);transition:border-color .2s,box-shadow .2s,transform .15s;
+  }
+  .tama:active{transform:scale(.95)}
+  .tama .nm{font-family:"Shippori Mincho",serif;font-size:14.5px;letter-spacing:.14em;font-weight:600}
+  .tama .yomi{font-size:9.5px;letter-spacing:.1em;color:var(--ink-dim)}
+  .tama .dot{width:6px;height:6px;border-radius:50%;margin-bottom:2px;background:var(--c,#fff);box-shadow:0 0 8px var(--c,#fff)}
+  .tama.sel{
+    border-color:rgba(255,180,92,.6);
+    box-shadow:0 0 0 1px rgba(255,180,92,.35) inset,0 0 18px rgba(255,180,92,.18);
+  }
+  .tama.sel .yomi{color:var(--lantern)}
+  .tama:focus-visible{outline:2px solid var(--lantern);outline-offset:2px}
+
+  #fallback{
+    position:fixed;z-index:20;inset:0;display:none;
+    align-items:center;justify-content:center;text-align:center;
+    background:var(--night);padding:30px;font-size:14px;line-height:2;color:var(--ink-dim);
+  }
+  @media (prefers-reduced-motion:reduce){ #hint .ring{animation:none;opacity:.5} }
+</style>
+</head>
+<body>
+
+<div id="stage"></div>
+
+<header>
+  <div class="title">
+    <h1>湖上花火大会</h1>
+    <p>3D HANABI SIMULATOR</p>
+  </div>
+  <div class="switches">
+    <button class="sw" id="swAuto" aria-pressed="false">自動打上 OFF</button>
+    <button class="sw" id="swSnd" aria-pressed="false">音 OFF</button>
+  </div>
+</header>
+
+<div id="hint">
+  <div class="ring"></div>
+  <p>タップで打ち上げ<br>ドラッグで見回し ・ ピンチで遠近</p>
+</div>
+
+<div id="tamana" aria-live="polite"></div>
+
+<nav aria-label="花火の種類">
+  <div class="rail" id="rail"></div>
+</nav>
+
+<div id="fallback">3D表示を読み込めませんでした。<br>通信環境をご確認のうえ再読み込みしてください。</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+"use strict";
+/* ============================================================
+   湖上花火大会 3D — Three.js(WebGL)による立体花火
+   ・GPUパーティクル(加算合成シェーダー)
+   ・湖面リフレクション(ジオメトリ共有のミラー描画)
+   ・ドラッグ視点回転 / ピンチズーム / タップ打上
+============================================================ */
+if (typeof THREE === "undefined"){
+  document.getElementById("fallback").style.display = "flex";
+  throw new Error("three.js not loaded");
+}
+
+/* ---------- 基本セットアップ ---------- */
+const stage = document.getElementById("stage");
+const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:false });
+renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+renderer.setSize(innerWidth, innerHeight);
+stage.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x02030a);
+scene.fog = new THREE.FogExp2(0x04060f, 0.0032);
+
+const camera = new THREE.PerspectiveCamera(58, innerWidth/innerHeight, 0.1, 900);
+const camTarget = new THREE.Vector3(0, 20, 0);
+let camTheta = 0, camPhi = 0.12, camDist = 78;
+function updateCamera(){
+  camPhi = Math.min(0.6, Math.max(-0.05, camPhi));
+  camDist = Math.min(150, Math.max(35, camDist));
+  camera.position.set(
+    camTarget.x + camDist * Math.sin(camTheta) * Math.cos(camPhi),
+    camTarget.y + camDist * Math.sin(camPhi) + 2,
+    camTarget.z + camDist * Math.cos(camTheta) * Math.cos(camPhi)
+  );
+  camera.lookAt(camTarget);
+}
+updateCamera();
+
+addEventListener("resize", () => {
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const rnd = (a,b) => a + Math.random()*(b-a);
+
+/* ---------- 夜空グラデーションドーム ---------- */
+{
+  const geo = new THREE.SphereGeometry(500, 24, 16);
+  const mat = new THREE.ShaderMaterial({
+    side: THREE.BackSide, depthWrite:false, fog:false,
+    vertexShader:`
+      varying float vY;
+      void main(){ vY = normalize(position).y;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+    fragmentShader:`
+      varying float vY;
+      void main(){
+        vec3 top = vec3(0.006,0.010,0.038);
+        vec3 hor = vec3(0.055,0.075,0.190);
+        float t = smoothstep(-0.05, 0.55, vY);
+        gl_FragColor = vec4(mix(hor, top, t), 1.0); }`
+  });
+  scene.add(new THREE.Mesh(geo, mat));
+}
+
+/* ---------- 星空 ---------- */
+{
+  const n = 900, pos = new Float32Array(n*3);
+  for (let i=0;i<n;i++){
+    const th = Math.random()*Math.PI*2;
+    const ph = Math.acos(rnd(0.03, 1));
+    const r = 460;
+    pos[i*3]   = r*Math.sin(ph)*Math.cos(th);
+    pos[i*3+1] = r*Math.cos(ph);
+    pos[i*3+2] = r*Math.sin(ph)*Math.sin(th);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.BufferAttribute(pos,3));
+  const m = new THREE.PointsMaterial({ color:0xcdd6ff, size:1.4, sizeAttenuation:true,
+    transparent:true, opacity:0.75, fog:false, depthWrite:false });
+  scene.add(new THREE.Points(g, m));
+}
+
+/* ---------- 湖面 ---------- */
+{
+  const g = new THREE.PlaneGeometry(1200, 700);
+  const m = new THREE.MeshBasicMaterial({ color:0x060b1c });
+  const water = new THREE.Mesh(g, m);
+  water.rotation.x = -Math.PI/2;
+  water.position.y = 0;
+  water.renderOrder = 1;
+  scene.add(water);
+}
+
+/* ---------- 遠景の山並み ---------- */
+{
+  const mat = new THREE.MeshBasicMaterial({ color:0x050914 });
+  for (let i=0;i<14;i++){
+    const h = rnd(16, 42), r = rnd(30, 75);
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(r, h, 7), mat);
+    const a = rnd(0, Math.PI*2);
+    const d = rnd(190, 300);
+    cone.position.set(Math.sin(a)*d, h/2 - 1, Math.cos(a)*d);
+    scene.add(cone);
+  }
+}
+
+/* ---------- 対岸の街灯り ---------- */
+{
+  const n = 110, pos = new Float32Array(n*3), col = new Float32Array(n*3);
+  for (let i=0;i<n;i++){
+    const a = rnd(0, Math.PI*2), d = rnd(150, 240);
+    pos[i*3] = Math.sin(a)*d; pos[i*3+1] = rnd(0.6, 2.4); pos[i*3+2] = Math.cos(a)*d;
+    const warm = Math.random() < 0.72;
+    col[i*3] = warm?1:0.62; col[i*3+1] = warm?0.72:0.78; col[i*3+2] = warm?0.4:1;
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.BufferAttribute(pos,3));
+  g.setAttribute("color", new THREE.BufferAttribute(col,3));
+  const m = new THREE.PointsMaterial({ vertexColors:true, size:1.5, sizeAttenuation:true,
+    transparent:true, opacity:0.9, depthWrite:false });
+  const lights = new THREE.Points(g, m);
+  scene.add(lights);
+  const mirror = new THREE.Points(g, new THREE.PointsMaterial({ vertexColors:true, size:1.5,
+    sizeAttenuation:true, transparent:true, opacity:0.28, depthWrite:false, depthTest:false }));
+  mirror.scale.y = -1; mirror.renderOrder = 2;
+  scene.add(mirror);
+}
+
+/* ---------- 花火パーティクルシステム ---------- */
+const MAX = 11000;
+const pGeo = new THREE.BufferGeometry();
+const aPos  = new Float32Array(MAX*3);
+const aCol  = new Float32Array(MAX*3);
+const aSize = new Float32Array(MAX);
+const aLife = new Float32Array(MAX);
+pGeo.setAttribute("position", new THREE.BufferAttribute(aPos,3).setUsage(THREE.DynamicDrawUsage));
+pGeo.setAttribute("color",    new THREE.BufferAttribute(aCol,3).setUsage(THREE.DynamicDrawUsage));
+pGeo.setAttribute("size",     new THREE.BufferAttribute(aSize,1).setUsage(THREE.DynamicDrawUsage));
+pGeo.setAttribute("alife",    new THREE.BufferAttribute(aLife,1).setUsage(THREE.DynamicDrawUsage));
+
+// 物理量(CPU側)
+const vX = new Float32Array(MAX), vY = new Float32Array(MAX), vZ = new Float32Array(MAX);
+const pDecay = new Float32Array(MAX), pGrav = new Float32Array(MAX), pFric = new Float32Array(MAX);
+const pFlick = new Uint8Array(MAX), pTrail = new Uint8Array(MAX), pBaseLife = new Float32Array(MAX);
+const pSpin = new Float32Array(MAX);                                  // 蜂: 水平方向の渦巻き
+const pHue2 = new Float32Array(MAX), pSwapAt = new Float32Array(MAX); // 変化菊: 途中で色が変わる
+const free = []; for (let i=MAX-1;i>=0;i--) free.push(i);
+
+function makeMat(alpha){
+  return new THREE.ShaderMaterial({
+    transparent:true, depthWrite:false, depthTest:false,
+    blending:THREE.AdditiveBlending, fog:false,
+    uniforms:{ uAlpha:{ value:alpha } },
+    vertexShader:`
+      attribute float size;
+      attribute float alife;
+      varying float vLife;
+      varying vec3 vColor;
+      void main(){
+        vLife = alife; vColor = color;
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        float s = size * (0.45 + 0.55*alife);
+        gl_PointSize = s * (260.0 / max(1.0, -mv.z));
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader:`
+      uniform float uAlpha;
+      varying float vLife;
+      varying vec3 vColor;
+      void main(){
+        if (vLife <= 0.0) discard;
+        vec2 uv = gl_PointCoord - 0.5;
+        float d = length(uv) * 2.0;
+        float a = smoothstep(1.0, 0.0, d);
+        a *= a;
+        gl_FragColor = vec4(vColor * (0.6 + 0.9*vLife), a * vLife * uAlpha);
+      }`,
+    vertexColors:true,
+  });
+}
+const points = new THREE.Points(pGeo, makeMat(1.0));
+points.frustumCulled = false; points.renderOrder = 10;
+scene.add(points);
+
+// 湖面リフレクション: 同じジオメトリをY反転して淡く描く
+const mirrorPts = new THREE.Points(pGeo, makeMat(0.30));
+mirrorPts.frustumCulled = false; mirrorPts.renderOrder = 3;
+mirrorPts.scale.y = -1;
+scene.add(mirrorPts);
+
+const tmpColor = new THREE.Color();
+function spawn(x,y,z, vx,vy,vz, o){
+  if (!free.length) return;
+  const i = free.pop();
+  aPos[i*3]=x; aPos[i*3+1]=y; aPos[i*3+2]=z;
+  vX[i]=vx; vY[i]=vy; vZ[i]=vz;
+  tmpColor.setHSL(o.h/360, o.s ?? 1, o.l ?? 0.6);
+  aCol[i*3]=tmpColor.r; aCol[i*3+1]=tmpColor.g; aCol[i*3+2]=tmpColor.b;
+  aSize[i] = o.size; aLife[i] = 1; pBaseLife[i] = 1;
+  pDecay[i]=o.decay; pGrav[i]=o.gravity; pFric[i]=o.friction;
+  pFlick[i]=o.flicker?1:0; pTrail[i]=o.trail?1:0;
+  pSpin[i]=o.spin||0; pHue2[i]=o.hue2||0; pSwapAt[i]=o.swapAt||0;
+}
+
+/* ---------- サウンド(WebAudio合成) ----------
+   実際の花火の音響を再現:
+   ・距離に応じた到達遅延(光ってから遅れて「ドン」)と減衰
+   ・カメラ基準のステレオ定位
+   ・破裂音 = 高域の「パンッ」+ 胴体の「ドン」+ 低域の「ズシン」+ 余韻のゴロゴロ
+   ・山彦(フィードバックディレイ)/ 冠菊などのパチパチ(crackle)/ 蜂の笛音
+------------------------------------------------ */
+let audio=null, soundOn=false, master=null, echoIn=null, noiseBuf=null;
+function initAudio(){
+  if (audio) return;
+  audio = new (window.AudioContext||window.webkitAudioContext)();
+  master = audio.createGain(); master.gain.value = 0.9;
+  const comp = audio.createDynamicsCompressor();
+  comp.threshold.value=-18; comp.knee.value=22; comp.ratio.value=6;
+  comp.attack.value=0.003; comp.release.value=0.35;
+  master.connect(comp); comp.connect(audio.destination);
+  // 山彦: 対岸の山に反射して返ってくる残響
+  echoIn = audio.createGain(); echoIn.gain.value=1;
+  const dly = audio.createDelay(2.5); dly.delayTime.value=0.78;
+  const fb  = audio.createGain(); fb.gain.value=0.34;
+  const lp  = audio.createBiquadFilter(); lp.type="lowpass"; lp.frequency.value=800;
+  echoIn.connect(dly); dly.connect(lp); lp.connect(fb); fb.connect(dly);
+  const echoOut = audio.createGain(); echoOut.gain.value=0.45;
+  lp.connect(echoOut); echoOut.connect(master);
+  // 共有ホワイトノイズバッファ
+  const len = audio.sampleRate*2;
+  noiseBuf = audio.createBuffer(1, len, audio.sampleRate);
+  const d = noiseBuf.getChannelData(0);
+  for (let i=0;i<len;i++) d[i] = Math.random()*2-1;
+}
+const sndVec = new THREE.Vector3(), sndRight = new THREE.Vector3();
+function spatial(x,y,z){
+  sndVec.set(x,y,z).sub(camera.position);
+  const dist = sndVec.length();
+  sndRight.setFromMatrixColumn(camera.matrixWorld, 0);
+  const pan = Math.max(-0.9, Math.min(0.9, sndVec.normalize().dot(sndRight)));
+  return {
+    delay: dist/110,               // 音速による遅延(演出上少し速め)
+    att:   1/(1 + dist*0.012),     // 距離減衰
+    pan,
+  };
+}
+function outNode(pan, echoAmt){
+  let p;
+  if (audio.createStereoPanner){ p = audio.createStereoPanner(); p.pan.value = pan; }
+  else p = audio.createGain();
+  p.connect(master);
+  if (echoAmt > 0){
+    const g = audio.createGain(); g.gain.value = echoAmt;
+    p.connect(g); g.connect(echoIn);
+  }
+  return p;
+}
+function noiseSrc(t, dur){
+  const s = audio.createBufferSource();
+  s.buffer = noiseBuf; s.loop = true;
+  s.start(t); s.stop(t + dur);
+  return s;
+}
+function boom(size=1, x=0, y=30, z=0, delay=0){
+  if(!soundOn||!audio) return;
+  const sp = spatial(x,y,z);
+  const t = audio.currentTime + delay + sp.delay;
+  const v = Math.min(1.3, size) * sp.att;
+  const out = outNode(sp.pan, 0.6);
+  // 1) 破裂の「パンッ」(鋭い高域クラック)
+  {
+    const s = noiseSrc(t, 0.1);
+    const f = audio.createBiquadFilter(); f.type="bandpass"; f.frequency.value=3400; f.Q.value=0.6;
+    const g = audio.createGain();
+    g.gain.setValueAtTime(0.5*v, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t+0.08);
+    s.connect(f); f.connect(g); g.connect(out);
+  }
+  // 2) 胴体の「ドン」(ローパスを急降下させたノイズ)
+  {
+    const s = noiseSrc(t, 1.6);
+    const f = audio.createBiquadFilter(); f.type="lowpass";
+    f.frequency.setValueAtTime(1200*Math.min(1.4, 0.6+size*0.6), t);
+    f.frequency.exponentialRampToValueAtTime(85, t+1.0);
+    const g = audio.createGain();
+    g.gain.setValueAtTime(0.85*v, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t+1.4);
+    s.connect(f); f.connect(g); g.connect(out);
+  }
+  // 3) 腹に響く低音の「ズシン」
+  {
+    const o = audio.createOscillator(); o.type="sine";
+    o.frequency.setValueAtTime(50 + 20*size, t);
+    o.frequency.exponentialRampToValueAtTime(26, t+0.7);
+    const g = audio.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.75*v, t+0.02);
+    g.gain.exponentialRampToValueAtTime(0.001, t+0.9);
+    o.connect(g); g.connect(out);
+    o.start(t); o.stop(t+1);
+  }
+  // 4) 余韻のゴロゴロ(遅れて立ち上がる低域ノイズ)
+  {
+    const s = noiseSrc(t+0.12, 2.2);
+    const f = audio.createBiquadFilter(); f.type="lowpass"; f.frequency.value=170;
+    const g = audio.createGain();
+    g.gain.setValueAtTime(0.0001, t+0.12);
+    g.gain.linearRampToValueAtTime(0.2*v, t+0.4);
+    g.gain.exponentialRampToValueAtTime(0.001, t+2.3);
+    s.connect(f); f.connect(g); g.connect(out);
+  }
+}
+// 冠菊・時雨などの「パチパチ」という爆ぜ音
+function crackle(x,y,z, amount=1, delay=0){
+  if(!soundOn||!audio) return;
+  const sp = spatial(x,y,z);
+  const t0 = audio.currentTime + delay + sp.delay + 0.15;
+  const out = outNode(sp.pan, 0.3);
+  const n = Math.floor(26*amount);
+  for (let i=0;i<n;i++){
+    const t = t0 + Math.pow(Math.random(), 0.65) * 1.5 * amount;
+    const s = noiseSrc(t, 0.02);
+    const f = audio.createBiquadFilter(); f.type="highpass"; f.frequency.value=rnd(3000,7500);
+    const g = audio.createGain();
+    g.gain.setValueAtTime(rnd(0.04,0.14)*sp.att, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t+0.018);
+    s.connect(f); f.connect(g); g.connect(out);
+  }
+}
+// 蜂の「ヒュルヒュル」という笛音
+function whistle(x,y,z){
+  if(!soundOn||!audio) return;
+  const sp = spatial(x,y,z);
+  for (let k=0;k<3;k++){
+    const t = audio.currentTime + sp.delay + rnd(0.05, 0.35);
+    const out = outNode(Math.max(-0.9, Math.min(0.9, sp.pan + rnd(-0.25,0.25))), 0.25);
+    const o = audio.createOscillator(); o.type="sine";
+    const f0 = rnd(2200, 3200);
+    o.frequency.setValueAtTime(f0, t);
+    o.frequency.exponentialRampToValueAtTime(f0*rnd(0.5,0.68), t+rnd(0.7,1.1));
+    const lfo = audio.createOscillator(); lfo.frequency.value = rnd(9,14);
+    const lg = audio.createGain(); lg.gain.value = f0*0.035;
+    lfo.connect(lg); lg.connect(o.frequency);
+    const g = audio.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.045*sp.att, t+0.05);
+    g.gain.exponentialRampToValueAtTime(0.001, t+1.15);
+    o.connect(g); g.connect(out);
+    o.start(t); o.stop(t+1.2);
+    lfo.start(t); lfo.stop(t+1.2);
+  }
+}
+// 打上音: 筒から出る「ドン」+ 上昇の「シュー」
+function launchSound(x,z){
+  if(!soundOn||!audio) return;
+  const sp = spatial(x, 2, z);
+  const t = audio.currentTime + sp.delay*0.6;
+  const out = outNode(sp.pan, 0.35);
+  const o = audio.createOscillator(); o.type="sine";
+  o.frequency.setValueAtTime(95, t);
+  o.frequency.exponentialRampToValueAtTime(38, t+0.22);
+  const og = audio.createGain();
+  og.gain.setValueAtTime(0.28*sp.att, t);
+  og.gain.exponentialRampToValueAtTime(0.001, t+0.3);
+  o.connect(og); og.connect(out);
+  o.start(t); o.stop(t+0.35);
+  const s = noiseSrc(t, 1.1);
+  const f = audio.createBiquadFilter(); f.type="bandpass"; f.Q.value=1.1;
+  f.frequency.setValueAtTime(800, t);
+  f.frequency.exponentialRampToValueAtTime(2800, t+1.0);
+  const g = audio.createGain();
+  g.gain.setValueAtTime(0.09*sp.att, t);
+  g.gain.exponentialRampToValueAtTime(0.004, t+1.05);
+  s.connect(f); f.connect(g); g.connect(out);
+}
+
+/* ---------- 花火の種類 ---------- */
+const TYPES = {
+  kiku:   { nm:"菊", yomi:"きく", dot:"#ffd27a",
+            count:230, speed:[0.14,0.62], gravity:0.0055, friction:0.977,
+            decay:[0.0055,0.009], hueMode:"gold", trail:true, flicker:true, size:2.0, crackle:0.7 },
+  botan:  { nm:"牡丹", yomi:"ぼたん", dot:"#ff6ea8",
+            count:200, speed:[0.16,0.68], gravity:0.006, friction:0.972,
+            decay:[0.009,0.015], hueMode:"vivid", trail:false, flicker:false, size:2.5 },
+  kawari: { nm:"変化菊", yomi:"へんかぎく", dot:"#7ac8ff",
+            count:240, speed:[0.14,0.60], gravity:0.005, friction:0.977,
+            decay:[0.006,0.009], hueMode:"gold", hue2Mode:"vivid", trail:true, flicker:false, size:2.2 },
+  yanagi: { nm:"枝垂柳", yomi:"しだれやなぎ", dot:"#ffe9b0",
+            count:150, speed:[0.10,0.46], gravity:0.0032, friction:0.988,
+            decay:[0.0026,0.0042], hueMode:"amber", trail:true, flicker:true, size:1.7 },
+  kamuro: { nm:"冠菊", yomi:"かむろ", dot:"#ffc44d",
+            count:280, speed:[0.13,0.56], gravity:0.0048, friction:0.983,
+            decay:[0.0038,0.0058], hueMode:"gold", trail:true, flicker:true, size:1.8, crackle:1.2 },
+  yashi:  { nm:"椰子", yomi:"やし", dot:"#ffd94d",
+            count:46, speed:[0.28,0.5], gravity:0.004, friction:0.985,
+            decay:[0.004,0.006], hueMode:"gold", trail:true, flicker:true, size:3.4, crackle:0.8 },
+  hachi:  { nm:"蜂", yomi:"はち", dot:"#c8ff6e",
+            count:80, speed:[0.08,0.3], gravity:0.001, friction:0.99,
+            decay:[0.007,0.011], hueMode:"vivid", trail:true, flicker:false, size:2.2,
+            spin:true, whistle:true },
+  shigure:{ nm:"時雨", yomi:"しぐれ", dot:"#dfe8ff",
+            count:190, speed:[0.08,0.4], gravity:0.0035, friction:0.986,
+            decay:[0.0035,0.0055], hueMode:"silver", sat:0.15, lum:0.88,
+            trail:false, flicker:true, size:2.0, crackle:1.6 },
+  senrin: { nm:"千輪", yomi:"せんりん", dot:"#8fd0ff", sub:true },
+  cross:  { nm:"分割菊", yomi:"クロセット", dot:"#ffa94d", cross:true },
+  dosei:  { nm:"土星", yomi:"どせい", dot:"#a8d8ff", ring:true },
+  heart:  { nm:"型物", yomi:"ハート", dot:"#ff5d7e", shape:true },
+  starmine:{ nm:"大スターマイン", yomi:"だいすたーまいん", dot:"#c7a6ff", mine:true },
+};
+let selected = "starmine";
+
+function hueFor(mode){
+  switch(mode){
+    case "gold":  return rnd(38,50);
+    case "amber": return rnd(34,44);
+    case "silver": return rnd(38,48);
+    case "vivid": {
+      const base=[350,320,275,210,185,130,55,18];
+      return base[(Math.random()*base.length)|0] + rnd(-8,8);
+    }
+    default: return rnd(0,360);
+  }
+}
+
+/* ---------- 打上玉・小玉 ---------- */
+const shells = [], subs = [];
+class Shell {
+  constructor(tx,ty,tz,type){
+    this.type = type;
+    this.x = tx + rnd(-4,4); this.y = 0; this.z = tz + rnd(-4,4);
+    const T = 72 + rnd(-8,8), g = 0.014;
+    this.vx = (tx-this.x)/T;
+    this.vy = ty/T + 0.5*g*T;
+    this.vz = (tz-this.z)/T;
+    this.g = g; this.ty = ty;
+    launchSound(this.x, this.z);
+  }
+  step(){
+    this.vy -= this.g;
+    this.x += this.vx; this.y += this.vy; this.z += this.vz;
+    if (Math.random()<0.9) spawn(this.x+rnd(-0.2,0.2), this.y, this.z+rnd(-0.2,0.2),
+      rnd(-0.02,0.02), rnd(-0.09,-0.03), rnd(-0.02,0.02),
+      { h:44, s:0.7, l:0.62, size:1.1, decay:rnd(0.05,0.09), gravity:0.003, friction:0.95 });
+    if (this.vy <= 0.06 || this.y >= this.ty){
+      explode(this.x, this.y, this.z, this.type);
+      return false;
+    }
+    return true;
+  }
+}
+class SubShell {
+  constructor(x,y,z,vx,vy,vz,timer,cfg){
+    this.x=x;this.y=y;this.z=z;this.vx=vx;this.vy=vy;this.vz=vz;this.t=timer;
+    this.cfg = cfg || null;
+    this.hue = (cfg && cfg.hue != null) ? cfg.hue : hueFor("vivid");
+  }
+  step(){
+    this.vx*=0.985; this.vz*=0.985; this.vy = this.vy*0.985 - 0.006;
+    this.x+=this.vx; this.y+=this.vy; this.z+=this.vz;
+    spawn(this.x,this.y,this.z, 0,0,0, { h:this.hue, l:0.7, size:1.4, decay:0.14, gravity:0, friction:1 });
+    if (--this.t <= 0){
+      const c = this.cfg || {};
+      burst(this.x,this.y,this.z, { count:c.count??52, speed:c.speed??[0.06,0.26], gravity:0.005, friction:0.972,
+        decay:c.decay??[0.011,0.019], hue:this.hue, trail:false, flicker:false, size:c.size??1.9 });
+      boom(c.boom??0.35, this.x, this.y, this.z);
+      return false;
+    }
+    return true;
+  }
+}
+
+/* ---------- 爆発 ---------- */
+function burst(x,y,z,cfg){
+  const n = Math.min(cfg.count, free.length);
+  const baseHue = cfg.hue ?? hueFor(cfg.hueMode);
+  // 変化菊: 全星が同時に同じ色へ変わる(玉ごとに変化後の色を決める)
+  const hue2base = cfg.hue2Mode ? hueFor(cfg.hue2Mode) : 0;
+  const swapAt = cfg.hue2Mode ? rnd(0.45,0.6) : 0;
+  for (let i=0;i<n;i++){
+    // 一様な3D球面分布
+    const u = rnd(-1,1), th = rnd(0,Math.PI*2);
+    const s = Math.sqrt(1-u*u);
+    const sp = rnd(cfg.speed[0], cfg.speed[1]);
+    const hue = cfg.hueMode==="gold"||cfg.hueMode==="amber" ? hueFor(cfg.hueMode) : baseHue + rnd(-6,6);
+    spawn(x,y,z, s*Math.cos(th)*sp, u*sp, s*Math.sin(th)*sp, {
+      h:hue, s:cfg.sat, l:cfg.lum, decay:rnd(cfg.decay[0],cfg.decay[1]), size:cfg.size,
+      gravity:cfg.gravity, friction:cfg.friction, trail:cfg.trail, flicker:cfg.flicker,
+      spin: cfg.spin ? (Math.random()<0.5?-1:1)*rnd(0.05,0.13) : 0,
+      hue2: hue2base + rnd(-5,5), swapAt,
+    });
+  }
+}
+function flash(x,y,z,hue){
+  spawn(x,y,z, 0,0,0, { h:hue, s:0.6, l:0.85, size:34, decay:0.11, gravity:0, friction:1 });
+}
+const camRight = new THREE.Vector3(), camUp = new THREE.Vector3();
+function explode(x,y,z,key){
+  const t = TYPES[key];
+  showName(t);
+  if (t.sub){
+    flash(x,y,z,45); boom(0.5, x,y,z);
+    for (let i=0;i<13;i++){
+      const u=rnd(-1,1), th=rnd(0,Math.PI*2), s=Math.sqrt(1-u*u), sp=rnd(0.10,0.3);
+      subs.push(new SubShell(x,y,z, s*Math.cos(th)*sp, u*sp*0.8, s*Math.sin(th)*sp, 28+rnd(0,24)));
+    }
+    return;
+  }
+  if (t.cross){
+    // クロセット: 太い星が飛んでから一斉に分裂する
+    flash(x,y,z,42); boom(0.6, x,y,z);
+    for (let i=0;i<11;i++){
+      const u=rnd(-1,1), th=rnd(0,Math.PI*2), s=Math.sqrt(1-u*u), sp=rnd(0.16,0.34);
+      subs.push(new SubShell(x,y,z, s*Math.cos(th)*sp, u*sp*0.9, s*Math.sin(th)*sp, 22+rnd(0,16),
+        { count:30, speed:[0.05,0.22], decay:[0.012,0.02], size:2.0, boom:0.25 }));
+    }
+    return;
+  }
+  if (t.ring){
+    // 土星: 中心の小さな球 + ランダムな向きの土星環
+    flash(x,y,z,205); boom(0.85, x,y,z);
+    const axis = new THREE.Vector3(rnd(-1,1), rnd(-0.5,0.5), rnd(-1,1)).normalize();
+    const u = new THREE.Vector3(0,1,0).cross(axis);
+    if (u.lengthSq() < 0.01) u.set(1,0,0);
+    u.normalize();
+    const v = new THREE.Vector3().crossVectors(axis, u);
+    const ringHue = Math.random()<0.5 ? 205 : 45;
+    burst(x,y,z,{ count:90, speed:[0.03,0.16], gravity:0.004, friction:0.975,
+      decay:[0.010,0.016], hue:ringHue===205?45:205, trail:false, flicker:false, size:2.2 });
+    for (let i=0;i<110;i++){
+      const a=(i/110)*Math.PI*2, sp=0.42*rnd(0.97,1.03);
+      spawn(x,y,z,
+        (u.x*Math.cos(a)+v.x*Math.sin(a))*sp,
+        (u.y*Math.cos(a)+v.y*Math.sin(a))*sp,
+        (u.z*Math.cos(a)+v.z*Math.sin(a))*sp,
+        { h:ringHue, decay:rnd(0.008,0.012), size:2.4,
+          gravity:0.0028, friction:0.98, trail:false, flicker:false });
+    }
+    return;
+  }
+  if (t.shape){
+    flash(x,y,z,345); boom(0.8, x,y,z);
+    // カメラに正対する平面上にハートを描く
+    camRight.setFromMatrixColumn(camera.matrixWorld, 0);
+    camUp.setFromMatrixColumn(camera.matrixWorld, 1);
+    const hue = 345 + rnd(-8,8);
+    for (let i=0;i<130;i++){
+      const a = (i/130)*Math.PI*2;
+      const hx = 16*Math.pow(Math.sin(a),3);
+      const hy = 13*Math.cos(a) - 5*Math.cos(2*a) - 2*Math.cos(3*a) - Math.cos(4*a);
+      const sp = 0.026*rnd(0.95,1.05);
+      const vx = (camRight.x*hx + camUp.x*hy)*sp;
+      const vy = (camRight.y*hx + camUp.y*hy)*sp;
+      const vz = (camRight.z*hx + camUp.z*hy)*sp;
+      spawn(x,y,z, vx,vy,vz, { h:hue, decay:rnd(0.008,0.012), size:2.2,
+        gravity:0.0022, friction:0.982, trail:false, flicker:false });
+    }
+    return;
+  }
+  flash(x,y,z, t.hueMode==="vivid" ? hueFor("vivid") : 45);
+  boom(Math.min(1.2, t.count/220), x,y,z);
+  burst(x,y,z,t);
+  if (t.crackle) crackle(x,y,z, t.crackle);
+  if (t.whistle) whistle(x,y,z);
+  if (key==="kiku"||key==="kamuro"){
+    burst(x,y,z,{ count:60, speed:[0.04,0.22], gravity:0.0045, friction:0.975,
+      decay:[0.011,0.017], hueMode:"vivid", trail:false, flicker:false, size:2.1 });
+  }
+}
+
+/* ---------- 大スターマイン ---------- */
+const queue = []; let frame = 0;
+function starmine(cx,cz){
+  const base = frame;
+  const keys = ["botan","kiku","botan","kamuro","kawari","kiku","yashi"];
+  let f = 0;
+  for (let i=0;i<14;i++){   // 序:速射
+    queue.push({ frame:base+f, x:cx+rnd(-34,34), y:rnd(22,40), z:cz+rnd(-16,16),
+      type:keys[(Math.random()*keys.length)|0] });
+    f += 7 + rnd(0,7);
+  }
+  const midKeys = ["yanagi","senrin","cross","hachi"];
+  for (let i=0;i<6;i++){    // 破:柳・千輪・クロセット・蜂
+    queue.push({ frame:base+f, x:cx+rnd(-38,38), y:rnd(26,44), z:cz+rnd(-18,18),
+      type:midKeys[(Math.random()*midKeys.length)|0] });
+    f += 16 + rnd(0,10);
+  }
+  for (let i=0;i<10;i++){   // 急:同時多発フィナーレ
+    queue.push({ frame:base+f+rnd(0,8), x:cx+rnd(-44,44), y:rnd(24,46), z:cz+rnd(-20,20),
+      type:keys[(Math.random()*keys.length)|0] });
+  }
+  queue.push({ frame:base+f+26, x:cx, y:46, z:cz, type:"kamuro" });
+}
+
+/* ---------- 打上 ---------- */
+const raycaster = new THREE.Raycaster();
+const tapPlane = new THREE.Plane();
+const tapPoint = new THREE.Vector3();
+const camDir = new THREE.Vector3();
+function launchAtScreen(px,py){
+  const ndc = new THREE.Vector2((px/innerWidth)*2-1, -(py/innerHeight)*2+1);
+  raycaster.setFromCamera(ndc, camera);
+  camera.getWorldDirection(camDir);
+  tapPlane.setFromNormalAndCoplanarPoint(camDir.negate(), camTarget.clone().setY(26));
+  if (!raycaster.ray.intersectPlane(tapPlane, tapPoint)) tapPoint.set(0,30,0);
+  const x = Math.min(52, Math.max(-52, tapPoint.x));
+  const y = Math.min(48, Math.max(16, tapPoint.y));
+  const z = Math.min(30, Math.max(-30, tapPoint.z));
+  if (selected === "starmine"){ starmine(x, z); return; }
+  shells.push(new Shell(x, y, z, selected));
+}
+function launchRandom(type){
+  const prev = selected; selected = type;
+  const a = rnd(0,Math.PI*2), d = rnd(0,34);
+  if (type==="starmine") starmine(rnd(-14,14), rnd(-10,10));
+  else shells.push(new Shell(Math.sin(a)*d, rnd(22,44), Math.cos(a)*d*0.6, type));
+  selected = prev;
+}
+
+/* ---------- 視点操作(ドラッグ回転・ピンチズーム・タップ判定) ---------- */
+const pointers = new Map();
+let downX=0, downY=0, downT=0, moved=0, pinchD=0, dragging=false;
+const cv = renderer.domElement;
+cv.addEventListener("pointerdown", e => {
+  cv.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+  if (pointers.size === 1){
+    downX=e.clientX; downY=e.clientY; downT=performance.now(); moved=0; dragging=true;
+  } else if (pointers.size === 2){
+    const p = [...pointers.values()];
+    pinchD = Math.hypot(p[0].x-p[1].x, p[0].y-p[1].y);
+  }
+  initAudio();
+  if (audio && audio.state==="suspended") audio.resume();
+});
+cv.addEventListener("pointermove", e => {
+  if (!pointers.has(e.pointerId)) return;
+  const prev = pointers.get(e.pointerId);
+  const dx = e.clientX-prev.x, dy = e.clientY-prev.y;
+  pointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+  moved += Math.abs(dx)+Math.abs(dy);
+  if (pointers.size === 1 && dragging){
+    camTheta -= dx*0.005;
+    camPhi   += dy*0.003;
+    updateCamera();
+  } else if (pointers.size === 2){
+    const p = [...pointers.values()];
+    const d = Math.hypot(p[0].x-p[1].x, p[0].y-p[1].y);
+    if (pinchD > 0){ camDist *= pinchD/d; updateCamera(); }
+    pinchD = d;
+  }
+});
+function endPointer(e){
+  if (pointers.has(e.pointerId)) pointers.delete(e.pointerId);
+  if (pointers.size < 2) pinchD = 0;
+  if (pointers.size === 0 && dragging){
+    dragging = false;
+    const quick = performance.now()-downT < 350;
+    if (quick && moved < 10){ launchAtScreen(downX, downY); hideHint(); }
+  }
+}
+cv.addEventListener("pointerup", endPointer);
+cv.addEventListener("pointercancel", endPointer);
+cv.addEventListener("wheel", e => {   // PCマウスホイールでズーム
+  camDist *= 1 + Math.sign(e.deltaY)*0.08;
+  updateCamera();
+}, { passive:true });
+
+/* ---------- UI ---------- */
+const rail = document.getElementById("rail");
+const nameEl = document.getElementById("tamana");
+const hint = document.getElementById("hint");
+let nameTimer=null, hintShown=true;
+const ORDER = ["starmine","kiku","botan","kawari","yanagi","kamuro","yashi","senrin","cross","hachi","dosei","shigure","heart"];
+for (const key of ORDER){
+  const t = TYPES[key];
+  const b = document.createElement("button");
+  b.className = "tama" + (key===selected ? " sel" : "");
+  b.style.setProperty("--c", t.dot);
+  b.innerHTML = `<span class="dot"></span><span class="nm">${t.nm}</span><span class="yomi">${t.yomi}</span>`;
+  b.addEventListener("click", () => {
+    selected = key;
+    document.querySelectorAll(".tama").forEach(el => el.classList.remove("sel"));
+    b.classList.add("sel");
+    launchRandom(key);
+    hideHint();
+  });
+  rail.appendChild(b);
+}
+function showName(t){
+  nameEl.textContent = t.nm==="型物" ? "型物・ハート" : t.nm;
+  nameEl.classList.add("show");
+  clearTimeout(nameTimer);
+  nameTimer = setTimeout(()=>nameEl.classList.remove("show"), 1600);
+}
+function hideHint(){ if(!hintShown) return; hintShown=false; hint.classList.add("hide"); }
+
+let autoOn=false, autoTimer=0;
+document.getElementById("swAuto").addEventListener("click", function(){
+  autoOn=!autoOn; autoTimer=0;
+  this.classList.toggle("on", autoOn);
+  this.textContent = "自動打上 " + (autoOn?"ON":"OFF");
+  this.setAttribute("aria-pressed", autoOn);
+  hideHint();
+});
+document.getElementById("swSnd").addEventListener("click", function(){
+  initAudio();
+  if (audio && audio.state==="suspended") audio.resume();
+  soundOn=!soundOn;
+  this.classList.toggle("on", soundOn);
+  this.textContent = "音 " + (soundOn?"ON":"OFF");
+  this.setAttribute("aria-pressed", soundOn);
+});
+
+/* ---------- メインループ ---------- */
+function loop(){
+  requestAnimationFrame(loop);
+  frame++;
+
+  // スターマイン発射キュー
+  for (let i=queue.length-1;i>=0;i--){
+    if (queue[i].frame <= frame){
+      const q = queue.splice(i,1)[0];
+      shells.push(new Shell(q.x, q.y, q.z, q.type));
+    }
+  }
+  for (let i=shells.length-1;i>=0;i--) if(!shells[i].step()) shells.splice(i,1);
+  for (let i=subs.length-1;i>=0;i--)   if(!subs[i].step())   subs.splice(i,1);
+
+  // パーティクル物理更新(実寿命=pBaseLife / 表示寿命=aLife)
+  for (let i=0;i<MAX;i++){
+    if (pBaseLife[i] <= 0) continue;
+    vX[i]*=pFric[i]; vY[i]*=pFric[i]; vZ[i]*=pFric[i];
+    vY[i]-=pGrav[i];
+    if (pSpin[i] !== 0){   // 蜂: 速度を水平回転させて渦を描く
+      const c=Math.cos(pSpin[i]), s=Math.sin(pSpin[i]);
+      const nx = vX[i]*c - vZ[i]*s;
+      vZ[i] = vX[i]*s + vZ[i]*c;
+      vX[i] = nx;
+    }
+    aPos[i*3]+=vX[i]; aPos[i*3+1]+=vY[i]; aPos[i*3+2]+=vZ[i];
+    let life = pBaseLife[i] - pDecay[i];
+    if (pSwapAt[i] > 0 && life < pSwapAt[i]){   // 変化菊: 一斉に色替え
+      tmpColor.setHSL(pHue2[i]/360, 1, 0.62);
+      aCol[i*3]=tmpColor.r; aCol[i*3+1]=tmpColor.g; aCol[i*3+2]=tmpColor.b;
+      pSwapAt[i] = 0;
+    }
+    if (aPos[i*3+1] < 0.3) life -= 0.08;          // 着水で消える
+    if (pTrail[i] && life>0.15 && Math.random()<0.22 && free.length>600){
+      spawn(aPos[i*3],aPos[i*3+1],aPos[i*3+2], 0,0.002,0,
+        { h:44, s:0.75, l:0.5, size:1.0, decay:rnd(0.05,0.09), gravity:0.001, friction:1 });
+    }
+    if (life <= 0){ pBaseLife[i]=0; aLife[i]=0; free.push(i); continue; }
+    pBaseLife[i] = life;
+    aLife[i] = pFlick[i] && life<0.75 ? life*rnd(0.35,1) : life;
+  }
+
+  pGeo.attributes.position.needsUpdate = true;
+  pGeo.attributes.color.needsUpdate = true;
+  pGeo.attributes.size.needsUpdate = true;
+  pGeo.attributes.alife.needsUpdate = true;
+
+  // 自動打上
+  if (autoOn && --autoTimer <= 0){
+    const keys=["kiku","botan","kawari","yanagi","kamuro","yashi","senrin","cross","hachi","dosei","shigure","heart"];
+    const pick = Math.random()<0.12 ? "starmine" : keys[(Math.random()*keys.length)|0];
+    launchRandom(pick);
+    autoTimer = pick==="starmine" ? 460 : (reduceMotion ? 210 : 90+rnd(0,80));
+  }
+  // 誰も触っていないときの微小な視点ドリフト
+  if (!dragging && !reduceMotion){ camTheta += 0.00035; updateCamera(); }
+
+  renderer.render(scene, camera);
+}
+loop();
+
+// オープニングに一発
+setTimeout(()=>launchRandom("kiku"), 700);
+</script>
+</body>
+</html>
